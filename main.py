@@ -1,6 +1,9 @@
 """Main application for Jeep Patriot diagnostic assistant."""
 
 import os
+# Disable ChromaDB telemetry to prevent errors
+os.environ["ANONYMIZED_TELEMETRY"] = "False"
+
 import logging
 from dotenv import load_dotenv
 from patriot_agent import PatriotAgent

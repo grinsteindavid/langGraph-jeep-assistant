@@ -1,6 +1,9 @@
 """Semantic PDF reader using ChromaDB and PyPDFLoader for better search capabilities."""
 
 import os
+# Disable ChromaDB telemetry before any imports to prevent errors
+os.environ["ANONYMIZED_TELEMETRY"] = "False"
+
 import logging
 from typing import List, Dict
 from dotenv import load_dotenv
