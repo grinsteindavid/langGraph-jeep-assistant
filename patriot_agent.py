@@ -125,31 +125,48 @@ class PatriotAgent:
         """Generate diagnosis based on manual content and query."""
         logger.info("Generating diagnosis...")
         
+        # Check if we have any relevant manual sections
+        if not state["relevant_sections"] or len(state["relevant_sections"]) == 0:
+            state["diagnosis"] = f"""I apologize, but I cannot find any information about "{state['user_query']}" in the 2011 Jeep Patriot manual. 
+
+I can only provide diagnostic assistance based on the official manual content. Please try rephrasing your question using specific automotive terms like:
+- Engine problems
+- Transmission issues  
+- Brake concerns
+- Electrical problems
+- Cooling system
+- Maintenance procedures
+
+Or describe specific symptoms you're experiencing with your Patriot."""
+            return state
+        
         manual_context = "\n\n".join(state["relevant_sections"])
         
         diagnosis_prompt = f"""
-        Based on the Jeep Patriot manual content below, provide a diagnostic response for this query:
+        Based ONLY on the Jeep Patriot manual content below, provide a diagnostic response for this query:
         
         USER QUERY: {state['user_query']}
         
         RELEVANT MANUAL CONTENT:
         {manual_context}
         
-        Provide a comprehensive response that includes:
-        1. Initial assessment of the described issue
-        2. Possible causes based on the manual
-        3. Diagnostic steps to follow
-        4. Recommended solutions or repairs
-        5. Safety considerations if applicable
+        IMPORTANT: Only use information from the manual content provided above. Do not add general automotive knowledge.
         
-        Be specific and reference the manual information when possible.
+        Provide a response that includes:
+        1. What the manual says about this issue
+        2. Manual-specified diagnostic steps
+        3. Manual-recommended solutions
+        4. Any safety warnings from the manual
+        
+        If the manual content doesn't fully address the query, state that clearly.
         """
         
         try:
             response = self.llm.invoke([
-                SystemMessage(content="""You are an expert Jeep Patriot diagnostic technician. 
-                Use the provided manual content to give accurate, detailed diagnostic advice. 
-                Always prioritize safety and recommend professional service when appropriate."""),
+                SystemMessage(content="""You are a Jeep Patriot manual assistant. 
+                ONLY use the provided manual content in your response. 
+                Do not add general automotive knowledge or advice not found in the manual.
+                If the manual doesn't contain enough information, say so clearly."""),
                 HumanMessage(content=diagnosis_prompt)
             ])
             
@@ -157,7 +174,7 @@ class PatriotAgent:
             
         except Exception as e:
             logger.error(f"Error generating diagnosis: {e}")
-            state["diagnosis"] = "I apologize, but I encountered an error while analyzing your issue. Please try rephrasing your question."
+            state["diagnosis"] = "I apologize, but I encountered an error while analyzing the manual content. Please try again."
         
         return state
     
