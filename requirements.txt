@@ -4,4 +4,4 @@ langchain-openai==0.1.25
 langchain-community==0.2.16
 pypdf2==3.0.1
 python-dotenv==1.0.1
-openai==1.51.0
+openai>=1.40.0,<2.0.0

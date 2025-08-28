@@ -35,7 +35,7 @@ def main():
     print("📖 Loading manual content...")
     
     try:
-        agent = PatriotAgent(pdf_path, api_key)
+        agent = PatriotAgent(pdf_path)
         print("✅ Assistant ready!")
         print("\n" + "="*60)
         print("JEEP PATRIOT DIAGNOSTIC ASSISTANT")

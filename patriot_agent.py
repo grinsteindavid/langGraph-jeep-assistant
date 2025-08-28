@@ -1,7 +1,7 @@
 """LangGraph workflow for Jeep Patriot diagnostic assistant."""
 
-from typing import Dict, Any, List
-from langgraph import StateGraph, END
+from typing import Dict, Any, List, TypedDict
+from langgraph.graph import StateGraph, END
 from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 from pdf_reader import PatriotManualReader
@@ -9,25 +9,22 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class PatriotDiagnosticState:
+class PatriotDiagnosticState(TypedDict):
     """State management for the diagnostic workflow."""
-    
-    def __init__(self):
-        self.user_query: str = ""
-        self.manual_content: Dict[str, str] = {}
-        self.relevant_sections: List[str] = []
-        self.diagnosis: str = ""
-        self.recommendations: List[str] = []
-        self.conversation_history: List[Dict] = []
+    user_query: str
+    manual_content: Dict[str, str]
+    relevant_sections: List[str]
+    diagnosis: str
+    recommendations: List[str]
+    conversation_history: List[Dict]
 
 class PatriotAgent:
     """Main agent for Jeep Patriot diagnostics using LangGraph."""
     
-    def __init__(self, pdf_path: str, openai_api_key: str):
+    def __init__(self, pdf_path: str):
         self.pdf_reader = PatriotManualReader(pdf_path)
         self.llm = ChatOpenAI(
             model="gpt-4o-mini",
-            api_key=openai_api_key,
             temperature=0.1
         )
         self.workflow = self._build_workflow()
@@ -53,25 +50,25 @@ class PatriotAgent:
         
         return workflow.compile()
     
-    def _read_manual_node(self, state: PatriotDiagnosticState) -> PatriotDiagnosticState:
+    def _read_manual_node(self, state: PatriotDiagnosticState) -> Dict[str, Any]:
         """Read and process the Jeep Patriot manual."""
         logger.info("Reading Jeep Patriot manual...")
         
         try:
-            state.manual_content = self.pdf_reader.extract_sections()
-            logger.info(f"Successfully loaded manual with {len(state.manual_content)} sections")
+            state["manual_content"] = self.pdf_reader.extract_sections()
+            logger.info(f"Successfully loaded manual with {len(state['manual_content'])} sections")
         except Exception as e:
             logger.error(f"Error reading manual: {e}")
-            state.manual_content = {}
+            state["manual_content"] = {}
         
         return state
     
-    def _analyze_query_node(self, state: PatriotDiagnosticState) -> PatriotDiagnosticState:
+    def _analyze_query_node(self, state: PatriotDiagnosticState) -> Dict[str, Any]:
         """Analyze user query to understand the issue."""
         logger.info("Analyzing user query...")
         
         analysis_prompt = f"""
-        Analyze this Jeep Patriot related query: "{state.user_query}"
+        Analyze this Jeep Patriot related query: "{state['user_query']}"
         
         Identify:
         1. The main system involved (engine, transmission, electrical, brakes, etc.)
@@ -93,7 +90,9 @@ class PatriotAgent:
             ])
             
             # Store the analysis (simplified for now)
-            state.conversation_history.append({
+            if "conversation_history" not in state:
+                state["conversation_history"] = []
+            state["conversation_history"].append({
                 "type": "analysis",
                 "content": response.content
             })
@@ -103,35 +102,35 @@ class PatriotAgent:
         
         return state
     
-    def _search_manual_node(self, state: PatriotDiagnosticState) -> PatriotDiagnosticState:
+    def _search_manual_node(self, state: PatriotDiagnosticState) -> Dict[str, Any]:
         """Search manual for relevant information."""
         logger.info("Searching manual for relevant information...")
         
         # Search for query-related content
-        search_results = self.pdf_reader.search_manual(state.user_query)
+        search_results = self.pdf_reader.search_manual(state["user_query"])
         
         # Also search for common automotive terms
         automotive_terms = ["diagnostic", "troubleshoot", "symptom", "repair", "maintenance"]
         for term in automotive_terms:
-            if term.lower() in state.user_query.lower():
+            if term.lower() in state["user_query"].lower():
                 additional_results = self.pdf_reader.search_manual(term)
                 search_results.extend(additional_results[:3])  # Limit additional results
         
-        state.relevant_sections = search_results[:15]  # Limit total results
-        logger.info(f"Found {len(state.relevant_sections)} relevant manual sections")
+        state["relevant_sections"] = search_results[:15]  # Limit total results
+        logger.info(f"Found {len(state['relevant_sections'])} relevant manual sections")
         
         return state
     
-    def _generate_diagnosis_node(self, state: PatriotDiagnosticState) -> PatriotDiagnosticState:
+    def _generate_diagnosis_node(self, state: PatriotDiagnosticState) -> Dict[str, Any]:
         """Generate diagnosis based on manual content and query."""
         logger.info("Generating diagnosis...")
         
-        manual_context = "\n\n".join(state.relevant_sections)
+        manual_context = "\n\n".join(state["relevant_sections"])
         
         diagnosis_prompt = f"""
         Based on the Jeep Patriot manual content below, provide a diagnostic response for this query:
         
-        USER QUERY: {state.user_query}
+        USER QUERY: {state['user_query']}
         
         RELEVANT MANUAL CONTENT:
         {manual_context}
@@ -154,15 +153,15 @@ class PatriotAgent:
                 HumanMessage(content=diagnosis_prompt)
             ])
             
-            state.diagnosis = response.content
+            state["diagnosis"] = response.content
             
         except Exception as e:
             logger.error(f"Error generating diagnosis: {e}")
-            state.diagnosis = "I apologize, but I encountered an error while analyzing your issue. Please try rephrasing your question."
+            state["diagnosis"] = "I apologize, but I encountered an error while analyzing your issue. Please try rephrasing your question."
         
         return state
     
-    def _format_response_node(self, state: PatriotDiagnosticState) -> PatriotDiagnosticState:
+    def _format_response_node(self, state: PatriotDiagnosticState) -> Dict[str, Any]:
         """Format the final response."""
         logger.info("Formatting response...")
         
@@ -173,10 +172,16 @@ class PatriotAgent:
     
     def diagnose(self, user_query: str) -> str:
         """Main method to diagnose Jeep Patriot issues."""
-        state = PatriotDiagnosticState()
-        state.user_query = user_query
+        state = {
+            "user_query": user_query,
+            "manual_content": {},
+            "relevant_sections": [],
+            "diagnosis": "",
+            "recommendations": [],
+            "conversation_history": []
+        }
         
         # Run the workflow
         final_state = self.workflow.invoke(state)
         
-        return final_state.diagnosis
+        return final_state["diagnosis"]
