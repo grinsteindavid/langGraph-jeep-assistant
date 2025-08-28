@@ -2,6 +2,8 @@ langgraph==0.2.16
 langchain==0.2.16
 langchain-openai==0.1.25
 langchain-community==0.2.16
-pypdf2==3.0.1
 python-dotenv==1.0.1
 openai>=1.40.0,<2.0.0
+chromadb==0.4.24
+langchain-chroma==0.1.2
+pypdf==6.0.0

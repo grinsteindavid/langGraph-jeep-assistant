@@ -222,6 +222,12 @@ $RECYCLE.BIN/
 checkpoints/
 state/
 
+# ChromaDB vector database files
+chroma_db/
+*.sqlite3
+*.bin
+*.pickle
+
 # Temporary files
 temp/
 tmp/

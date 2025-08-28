@@ -4,7 +4,7 @@ from typing import Dict, Any, List, TypedDict
 from langgraph.graph import StateGraph, END
 from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
-from pdf_reader import PatriotManualReader
+from semantic_pdf_reader import SemanticPatriotManualReader
 import logging
 
 logger = logging.getLogger(__name__)
@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 class PatriotDiagnosticState(TypedDict):
     """State management for the diagnostic workflow."""
     user_query: str
-    manual_content: Dict[str, str]
     relevant_sections: List[str]
     diagnosis: str
     recommendations: List[str]
@@ -22,7 +21,7 @@ class PatriotAgent:
     """Main agent for Jeep Patriot diagnostics using LangGraph."""
     
     def __init__(self, pdf_path: str):
-        self.pdf_reader = PatriotManualReader(pdf_path)
+        self.pdf_reader = SemanticPatriotManualReader(pdf_path)
         self.llm = ChatOpenAI(
             model="gpt-4o-mini",
             temperature=0.1
@@ -52,14 +51,17 @@ class PatriotAgent:
     
     def _read_manual_node(self, state: PatriotDiagnosticState) -> Dict[str, Any]:
         """Read and process the Jeep Patriot manual."""
-        logger.info("Reading Jeep Patriot manual...")
+        logger.info("Loading and indexing Jeep Patriot manual...")
         
         try:
-            state["manual_content"] = self.pdf_reader.extract_sections()
-            logger.info(f"Successfully loaded manual with {len(state['manual_content'])} sections")
+            # Load and index the manual for semantic search
+            success = self.pdf_reader.load_and_index_manual()
+            if success:
+                logger.info("Successfully loaded and indexed manual")
+            else:
+                logger.error("Failed to load and index manual")
         except Exception as e:
             logger.error(f"Error reading manual: {e}")
-            state["manual_content"] = {}
         
         return state
     
@@ -103,20 +105,21 @@ class PatriotAgent:
         return state
     
     def _search_manual_node(self, state: PatriotDiagnosticState) -> Dict[str, Any]:
-        """Search manual for relevant information."""
-        logger.info("Searching manual for relevant information...")
+        """Search manual for relevant information using semantic search."""
+        logger.info("Performing semantic search on manual...")
         
-        # Search for query-related content
-        search_results = self.pdf_reader.search_manual(state["user_query"])
+        # Perform semantic search on the user query
+        search_results = self.pdf_reader.semantic_search(state["user_query"], k=8)
         
-        # Also search for common automotive terms
-        automotive_terms = ["diagnostic", "troubleshoot", "symptom", "repair", "maintenance"]
-        for term in automotive_terms:
-            if term.lower() in state["user_query"].lower():
-                additional_results = self.pdf_reader.search_manual(term)
-                search_results.extend(additional_results[:3])  # Limit additional results
+        # Also try related automotive terms if the query is vague
+        if len(search_results) < 3:
+            automotive_terms = ["diagnostic", "troubleshoot", "symptom", "repair", "maintenance"]
+            for term in automotive_terms:
+                if term.lower() in state["user_query"].lower():
+                    additional_results = self.pdf_reader.semantic_search(f"{term} {state['user_query']}", k=3)
+                    search_results.extend(additional_results)
         
-        state["relevant_sections"] = search_results[:15]  # Limit total results
+        state["relevant_sections"] = search_results[:10]  # Limit total results
         logger.info(f"Found {len(state['relevant_sections'])} relevant manual sections")
         
         return state
@@ -191,7 +194,6 @@ Or describe specific symptoms you're experiencing with your Patriot."""
         """Main method to diagnose Jeep Patriot issues."""
         state = {
             "user_query": user_query,
-            "manual_content": {},
             "relevant_sections": [],
             "diagnosis": "",
             "recommendations": [],
