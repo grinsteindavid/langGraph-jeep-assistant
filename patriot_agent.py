@@ -91,7 +91,9 @@ class PatriotAgent:
                 HumanMessage(content=analysis_prompt)
             ])
             
-            # Store the analysis (simplified for now)
+            logger.info(f"Query analysis response: {response.content}")
+            
+            # Store the analysis
             if "conversation_history" not in state:
                 state["conversation_history"] = []
             state["conversation_history"].append({
@@ -110,17 +112,27 @@ class PatriotAgent:
         
         # Perform semantic search on the user query
         search_results = self.pdf_reader.semantic_search(state["user_query"], k=8)
+        logger.info(f"Initial search for '{state['user_query']}' returned {len(search_results)} results")
         
         # Also try related automotive terms if the query is vague
         if len(search_results) < 3:
             automotive_terms = ["diagnostic", "troubleshoot", "symptom", "repair", "maintenance"]
             for term in automotive_terms:
                 if term.lower() in state["user_query"].lower():
-                    additional_results = self.pdf_reader.semantic_search(f"{term} {state['user_query']}", k=3)
+                    expanded_query = f"{term} {state['user_query']}"
+                    logger.info(f"Expanding search with: '{expanded_query}'")
+                    additional_results = self.pdf_reader.semantic_search(expanded_query, k=3)
                     search_results.extend(additional_results)
         
         state["relevant_sections"] = search_results[:10]  # Limit total results
         logger.info(f"Found {len(state['relevant_sections'])} relevant manual sections")
+        
+        # Log the RAG context being sent to LLM for debugging
+        if state["relevant_sections"]:
+            logger.info("RAG context preview:")
+            for i, section in enumerate(state["relevant_sections"][:3]):  # Log first 3 sections
+                preview = section[:200] + "..." if len(section) > 200 else section
+                logger.info(f"  Section {i+1}: {preview}")
         
         return state
     
@@ -165,13 +177,21 @@ Or describe specific symptoms you're experiencing with your Patriot."""
         """
         
         try:
-            response = self.llm.invoke([
+            messages = [
                 SystemMessage(content="""You are a Jeep Patriot manual assistant. 
                 ONLY use the provided manual content in your response. 
                 Do not add general automotive knowledge or advice not found in the manual.
                 If the manual doesn't contain enough information, say so clearly."""),
                 HumanMessage(content=diagnosis_prompt)
-            ])
+            ]
+            
+            logger.info(f"Sending diagnosis prompt to LLM (length: {len(diagnosis_prompt)} chars)")
+            logger.debug(f"Full diagnosis prompt: {diagnosis_prompt}")
+            
+            response = self.llm.invoke(messages)
+            
+            logger.info(f"LLM diagnosis response (length: {len(response.content)} chars)")
+            logger.debug(f"Full LLM response: {response.content}")
             
             state["diagnosis"] = response.content
             
